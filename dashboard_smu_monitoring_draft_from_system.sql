@@ -1,20 +1,34 @@
+--masih pakai dummy >> `dev_idexp.temporary_table_dummy_smu`
 
 WITH root_smu_system AS (
 
 SELECT
+  -- DISTINCT(ww.waybill_no) waybill_no,
   sc.waybill_no,
   sc.bag_no,
   sc.vehicle_tag_no,
   DATE(sc.record_time, 'Asia/Jakarta') AS record_time,
   CONCAT(sc.bag_no,' ','-',' ',sc.vehicle_tag_no,' ','-',' ',sc.waybill_no) AS bm_vm_awb,
   CONCAT(sc.bag_no,' ','-',' ',sc.vehicle_tag_no) AS bm_vm_concat,
+  -- rd1.option_name AS operation_type,
+  -- pu.pulau,
+
+  -- CAST(ww.item_actual_weight AS NUMERIC) AS item_actual_weight,
 
 FROM `datawarehouse_idexp.waybill_waybill_line` sc
   LEFT JOIN `datawarehouse_idexp.system_option` rd1 ON sc.operation_type = rd1.option_value AND rd1.type_option = 'operationType'
 
 WHERE DATE(sc.record_time) BETWEEN '2023-07-01' AND '2023-07-31' -->= (DATE(DATE_ADD(CURRENT_DATE(), INTERVAL -20 DAY)))
-
+-- AND sc.operation_type = '04'
+  -- AND ww.sender_province_name = 'DKI JAKARTA'
+  -- AND sc.bag_no IN (  )
+  -- AND sc.vehicle_tag_no IN ()
 AND bag_no IS NOT NULL AND vehicle_tag_no IS NOT NULL
+-- GROUP BY 1,2,3,4,5,6,7,8,9
+-- QUALIFY ROW_NUMBER() OVER (PARTITION BY ww.waybill_no ORDER BY ww.update_time DESC)=1
+-- QUALIFY ROW_NUMBER() OVER (PARTITION BY sc.waybill_no ORDER BY sc.record_time DESC)=1
+-- wl.operation_type, 
+-- wl.record_time ORDER BY ww.waybill_no, wl.record_time ASC)=1
 ),
 
 smu_sending AS (
@@ -40,6 +54,7 @@ smu_sending AS (
   AND (CONCAT(sc.bag_no,' ','-',' ',sc.operation_branch_name,' ','-',' ',sc.vehicle_tag_no)) IS NOT NULL
   AND bag_no IS NOT NULL AND vehicle_tag_no IS NOT NULL
 
+-- QUALIFY ROW_NUMBER() OVER (PARTITION BY sc.waybill_no ORDER BY sc.record_time ASC)=1
 ),
 
 smu_arrival AS (
@@ -65,6 +80,7 @@ smu_arrival AS (
   AND (CONCAT(sc.bag_no,' ','-',' ',sc.operation_branch_name,' ','-',' ',sc.vehicle_tag_no)) IS NOT NULL
   AND bag_no IS NOT NULL AND vehicle_tag_no IS NOT NULL
 
+-- QUALIFY ROW_NUMBER() OVER (PARTITION BY sc.waybill_no ORDER BY sc.record_time DESC)=1
 ),
 
 shipping_waybill AS (
@@ -87,18 +103,36 @@ shipping_waybill AS (
   ww.recipient_province_name,
   ww.recipient_city_name,
   ww.recipient_district_name,
+  DATE(ww.pod_record_time,'Asia/Jakarta') pod_record_time,
   ww.pod_branch_name,
+  rf.option_name AS return_flag,
+  DATE(ww.return_pod_record_time,'Asia/Jakarta') return_pod_record_time,
+  ww.return_pod_branch_name,
+  CASE
+  WHEN ww.pod_record_time IS NOT NULL THEN ww.pod_branch_name
+  WHEN ww.pod_record_time IS NULL AND ww.return_pod_record_time IS NOT NULL THEN ww.return_pod_branch_name
+  END AS pod_or_return_pod_branch, 
 
 
   FROM `datawarehouse_idexp.waybill_waybill` ww
   LEFT JOIN `datawarehouse_idexp.system_option` et ON ww.express_type = et.option_value AND et.type_option = 'expressType'
+  LEFT JOIN `datawarehouse_idexp.system_option` rf ON ww.return_flag = rf.option_value AND rf.type_option = 'returnFlag'
 
   WHERE DATE(ww.shipping_time) BETWEEN '2023-04-01' AND '2023-08-16'
-  AND ww.deleted = '0'
+  AND ww.void_flag = '0' AND ww.deleted = '0'
+
+
 )
 
 SELECT 
 *
+-- bag_no,
+-- vehicle_tag_no,
+-- SUM(system_sf) total_system_sf,
+-- SUM(system_weight) total_weight,
+-- SUM(item_actual_weight) item_actual_weight,
+-- COUNT(bag_no) count_BM,
+
  FROM (
 
   SELECT
@@ -126,15 +160,32 @@ SELECT
   ww.recipient_city_name,
   ww.recipient_district_name,
   ww.pod_branch_name,
+  ww.pod_record_time,
+  ww.return_flag,
+  ww.return_pod_record_time,
+  ww.return_pod_branch_name,
+  ww.pod_or_return_pod_branch,
+
   ss.mh_sending,
   sa.mh_arrival,
+
 
   FROM root_smu_system sc
   LEFT OUTER JOIN shipping_waybill ww ON sc.waybill_no = ww.waybill_no
   LEFT OUTER JOIN smu_sending ss ON sc.bm_vm_awb = ss.bm_vm_awb
   LEFT OUTER JOIN smu_arrival sa ON sc.bm_vm_awb = sa.bm_vm_awb
 
+  -- WHERE waybill_no = 'IDS900077226141'
+  -- WHERE 
+  -- bag_no IN ('BA2500043954')
+  -- AND 
+  -- vehicle_tag_no IN ('VF0330000971')
+  -- waybill_no = 'IDE702946439234'
+
   QUALIFY ROW_NUMBER() OVER (PARTITION BY bm_vm_awb)=1
+  -- QUALIFY ROW_NUMBER() OVER (PARTITION BY vehicle_tag_no)=1
+  -- QUALIFY ROW_NUMBER() OVER (PARTITION BY waybill_no)=1
+  )
 
 -- GROUP BY 1,2
 WHERE shipping_time IS NOT NULL
