@@ -45,6 +45,9 @@ query AS (
     recipient_city_name destination_city,
     recipient_district_name destination_district,
     pod_branch_name,
+    return_flag,
+    return_pod_branch_name,
+    pod_or_return_pod_branch,
 
   FROM `dev_idexp.temporary_table_dummy_smu`
   -- GROUP BY 1,2,3
